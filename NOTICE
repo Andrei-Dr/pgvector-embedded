@@ -1,0 +1,17 @@
+pgvector-embedded
+
+The scripts and workflows in this repository are licensed under the Apache License,
+Version 2.0 (see LICENSE).
+
+The release archives contain pgvector (https://github.com/pgvector/pgvector), compiled
+unmodified from its tagged source. pgvector is distributed under the PostgreSQL License:
+
+  Portions Copyright (c) 1996-2026, PostgreSQL Global Development Group
+  Portions Copyright (c) 1994, The Regents of the University of California
+
+Each archive carries pgvector's own LICENSE file at its root, as that license requires.
+
+The archives are compiled against, but do not contain, the PostgreSQL builds of
+theseus-rs/postgresql-binaries (https://github.com/theseus-rs/postgresql-binaries).
+PostgreSQL is distributed under the PostgreSQL License
+(https://www.postgresql.org/about/licence/).
