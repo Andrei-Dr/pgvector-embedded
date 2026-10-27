@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# A tag v<pgvector version>-pg<theseus PostgreSQL version> (v0.8.7-pg17.11.1) builds the five
+# archives with scripts/build.sh, each on a runner of its own architecture (the linux ones in
+# their pinned containers, natively), writes SHA256SUMS and publishes the GitHub release.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*-pg*"
+
+permissions: {}
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-14
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Versions from the tag
+        id: versions
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-pg([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "tag $GITHUB_REF_NAME is not v<pgvector x.y.z>-pg<postgresql x.y.z>" >&2
+            exit 1
+          fi
+          echo "pgvector=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          echo "postgresql=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        env:
+          PGVECTOR: ${{ steps.versions.outputs.pgvector }}
+          POSTGRESQL: ${{ steps.versions.outputs.postgresql }}
+          TARGET: ${{ matrix.target }}
+        run: scripts/build.sh "$PGVECTOR" "$POSTGRESQL" "$TARGET" dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          zips=(./*.zip)
+          test "${#zips[@]}" -eq 5
+          sha256sum ./*.zip | sed 's|  \./|  |' > SHA256SUMS
+          cat SHA256SUMS
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "pgvector built against the theseus-rs PostgreSQL builds postgresql_embedded installs, in PortalCorp's zip layout. Verify: sha256sum -c SHA256SUMS (shasum -a 256 -c on macOS). Built by scripts/build.sh at this tag; inputs pinned in inputs.sha256."
